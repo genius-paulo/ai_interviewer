@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ai-interviwer"
+version = "0.1.0"
+description = ""
+authors = ["genius-paulo <124434105+genius-paulo@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+httpx = "^0.28.1"
+python-dotenv = "^1.0.1"
+pydantic-settings = "^2.7.0"
+pydantic = "^2.10.4"
+gigachat = "^0.1.36"
+aiogram = "2.25"
+loguru = "^0.7.3"
+flake8 = "^7.1.1"
+black = "^24.10.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
