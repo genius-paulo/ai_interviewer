@@ -1,3 +1,7 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
 class Commands:
     start = 'start'
 
@@ -11,3 +15,9 @@ class Commands:
 
     cancel_command = 'cancel'
     cancel_text = '🙅Отмена'
+
+
+class User(BaseModel):
+    id: Optional[int] = None
+    tg_id: int
+    skills: Optional[str] = None

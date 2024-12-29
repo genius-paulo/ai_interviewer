@@ -18,3 +18,10 @@ async def question_keyboard() -> ReplyKeyboardMarkup:
         ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
     return keyboard
+
+
+async def skills_keyboard() -> ReplyKeyboardMarkup:
+    kb_list = [
+        [KeyboardButton(text=Commands.cancel_text)]]
+    keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
+    return keyboard
