@@ -7,5 +7,7 @@ AI-помощник для подготовки к интервью Middle Pytho
 4. Написать `/get_question` в боте или воспользоваться кнопками
 
 ### Инструкция для быстрого запуска локально
-1.  Запустить контейнер базы данных:
+1. Указать в .env тестовый `TG_TOKEN` и `DB_HOST=localhost` для локалки
+2. Запустить контейнер базы данных:
 `docker run --name pg-container -e POSTGRES_DB=inter_db -e POSTGRES_USER=inter_user -e POSTGRES_PASSWORD=inter_password -p 5432:5432 -d postgres:15`
+3. Запустить main.py, можно прямо из консоли

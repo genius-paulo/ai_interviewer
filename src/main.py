@@ -5,7 +5,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from src.config import settings
 from src.bot.handlers import register_handlers
-from src.db import db
+from src.db import db, models
 
 from loguru import logger
 
@@ -13,8 +13,10 @@ from loguru import logger
 async def main():
     # Инициализация БД
     logger.info(f'Подключились к базе данных: {db.db}')
-    # Соаздали в БД таблицы
-    logger.info(f'Таблицы созданы: {await db.create_tables(db.Users)}')
+    # Создали в БД таблицы
+    await db.create_tables(models.Users())
+    await db.create_tables(models.SkillsScores())
+    logger.info(f'Таблицы созданы')
     # Инициализация бота
     bot = Bot(token=settings.tg_token)
     logger.info(f'Бот инициализирован: {bot}')

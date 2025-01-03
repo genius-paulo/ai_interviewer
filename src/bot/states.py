@@ -5,3 +5,4 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 class Form(StatesGroup):
     question = State()
     skills = State()
+    mode = State()
