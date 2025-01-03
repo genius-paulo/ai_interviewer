@@ -4,7 +4,7 @@ import asyncio
 from src.config import settings
 from loguru import logger
 
-from src.bot.models import User
+from src.bot.models import User, Modes
 from src.db.models import DBModel, Users, SkillsScores, database_proxy
 
 logger.debug(settings)
@@ -25,9 +25,9 @@ async def get_table(table: DBModel):
     return await table.select()
 
 
-async def get_or_create_user(user: User, table: Users = Users) -> [User, bool]:
+async def get_or_create_user(user: User, table: Users = Users) -> User:
     async with db.aio_atomic():
-        result_user = table.get_or_create(tg_id=user.tg_id)[0]
+        result_user = table.get_or_create(tg_id=user.tg_id, mode=Modes().all, skill='basic')[0]
         SkillsScores.get_or_create(user_id=result_user)
         logger.debug(result_user)
         return result_user

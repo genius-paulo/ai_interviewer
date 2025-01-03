@@ -25,7 +25,7 @@ async def start(message: types.Message, state: FSMContext):
     logger.debug(f'Тип id пользователя: {type(message.from_user.id)}')
     # TODO: Для скиллов нужны новые модельки с техническим названием, русскоязычным значением и развернутым описанием подтем,
     # конкретно здесь сейчас передаю basic строкой, тк тяжело передать название атрибута, в нужно именно оно
-    user = await db.get_or_create_user(User(tg_id=message.from_user.id, mode=mode.all, skill='basic'))
+    user = await db.get_or_create_user(User(tg_id=message.from_user.id))
     logger.info(f'Пользователь {user} c Telegram ID {message.from_user.id} создан')
     # TODO: Текст нужно вынести в отдельный дата-класс
     await message.answer(f'Привет, {message.from_user.full_name}! Я бот-интервьюер. '

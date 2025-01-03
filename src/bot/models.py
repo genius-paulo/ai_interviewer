@@ -55,4 +55,5 @@ class Modes(BaseModel):
     worst: str = 'worst'
 
 
+# TODO: Это нужно убрать
 mode = Modes()
