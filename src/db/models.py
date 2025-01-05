@@ -1,6 +1,6 @@
 import peewee
 
-from src.bot.models import mode, SkillsData
+from src.bot.models import skills, basics
 
 # Создаем пустой Proxy для будущей базы данных
 database_proxy = peewee.Proxy()
@@ -15,21 +15,20 @@ class DBModel(peewee.Model):
 class Users(DBModel):
     id = peewee.AutoField(primary_key=True)
     tg_id = peewee.BigIntegerField(unique=True)
-    mode = peewee.CharField(choices=[mode.all, mode.specific, mode.worst], default=mode.all)
-    skill = peewee.TextField(default=SkillsData().basic)
+    mode = peewee.CharField(choices=[basics.Modes().all, basics.Modes().specific, basics.Modes().worst],
+                            default=basics.Modes().all)
+    skill = peewee.TextField(default=skills.Basic().short_name)
 
-
-class SkillsScores(DBModel):
-    user_id = peewee.ForeignKeyField(Users)
-    basic = peewee.IntegerField(default=0)
-    oop = peewee.IntegerField(default=0)
-    standard_lib = peewee.IntegerField(default=0)
-    async_prog = peewee.IntegerField(default=0)
-    db = peewee.IntegerField(default=0)
-    web = peewee.IntegerField(default=0)
-    test = peewee.IntegerField(default=0)
-    docs = peewee.IntegerField(default=0)
-    devops = peewee.IntegerField(default=0)
-    efficiency = peewee.IntegerField(default=0)
-    additional = peewee.IntegerField(default=0)
-    algorithms = peewee.IntegerField(default=0)
+    # Оценки скиллов
+    basic = peewee.FloatField(default=0.0)
+    oop = peewee.FloatField(default=0.0)
+    standard_lib = peewee.FloatField(default=0.0)
+    async_prog = peewee.FloatField(default=0.0)
+    db = peewee.FloatField(default=0.0)
+    web = peewee.FloatField(default=0.0)
+    test = peewee.FloatField(default=0.0)
+    docs = peewee.FloatField(default=0.0)
+    devops = peewee.FloatField(default=0.0)
+    efficiency = peewee.FloatField(default=0.0)
+    additional = peewee.FloatField(default=0.0)
+    algorithms = peewee.FloatField(default=0.0)

@@ -1,13 +1,13 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from src.bot.models import Commands, SkillsData, Modes
+from src.bot.models import basics, skills
 
 
 async def main_keyboard() -> ReplyKeyboardMarkup:
     kb_list = [
-        [KeyboardButton(text=Commands.get_question_text),
-         KeyboardButton(text=Commands.change_skills_text)],
-        [KeyboardButton(text=Commands.profile_text),
-         KeyboardButton(text=Commands.change_mode_text)],
+        [KeyboardButton(text=basics.Commands.get_question_text),
+         KeyboardButton(text=basics.Commands.change_skills_text)],
+        [KeyboardButton(text=basics.Commands.profile_text),
+         KeyboardButton(text=basics.Commands.change_mode_text)],
         ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
     return keyboard
@@ -15,24 +15,42 @@ async def main_keyboard() -> ReplyKeyboardMarkup:
 
 async def question_keyboard() -> ReplyKeyboardMarkup:
     kb_list = [
-        [KeyboardButton(text=Commands.another_question_text),
-         KeyboardButton(text=Commands.cancel_text)],
+        [KeyboardButton(text=basics.Commands.another_question_text),
+         KeyboardButton(text=basics.Commands.cancel_text)],
         ]
     keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
     return keyboard
 
 
+async def cancel_keyboard() -> ReplyKeyboardMarkup:
+    kb_list = [
+        [KeyboardButton(text=basics.Commands.cancel_text)]]
+    keyboard = ReplyKeyboardMarkup(keyboard=kb_list, resize_keyboard=True)
+    return keyboard
+
+
 async def skills_keyboard():
-    skills_dict = SkillsData().model_dump()
+    skills_list = skills.Skills.get_children()
     keyboard = InlineKeyboardMarkup()
-    for skill_name, skill_value in skills_dict.items():
-        keyboard.add(InlineKeyboardButton(text=skill_value, callback_data=skill_name))
+    for skill in skills_list:
+        keyboard.add(InlineKeyboardButton(text=skill().short_description, callback_data=skill().short_name))
     return keyboard
 
 
 async def mode_keyboard():
-    mode_dict = Modes().model_dump()
+    mode_dict = basics.Modes().model_dump()
     keyboard = InlineKeyboardMarkup()
     for skill_name, skill_value in mode_dict.items():
         keyboard.add(InlineKeyboardButton(text=skill_value, callback_data=skill_name))
     return keyboard
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    async def main():
+        print(skills.Skills.get_children())
+        keyboard = await skills_keyboard()
+        print(keyboard)
+
+    asyncio.run(main())

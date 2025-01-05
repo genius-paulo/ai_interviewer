@@ -1,10 +1,11 @@
 import random
+import asyncio
 import re
 from loguru import logger
-import asyncio
 
-from src.bot.models import User, Modes, SkillsData
-from src.db import db, models
+from src.bot.models import basics, skills
+from src.config import settings
+from src.db import db
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,24 +14,28 @@ import uuid
 import os
 
 
-async def get_questions_category(user: User) -> str:
-    user = await db.get_user(user)
-    skills = SkillsData()
-    if user.mode == Modes.all:
-        skill = random.choice(skills.get_values())
+async def get_skill_by_category(tg_id_user) -> skills.Skills:
+
+    user = await db.get_user(tg_id=tg_id_user)
+
+    if user.mode == basics.Modes().all:
+        skill = random.choice(skills.Skills.get_children())
         logger.info(f'Пользователь тренирует все скиллы. Выбираем навык рандомно: {skill}')
-        return skill
-    elif user.mode == Modes.specific:
-        skill = user.skill
+        return skill()
+
+    elif user.mode == basics.Modes().specific:
+        skill = skills.Skills.get_skill_by_name(user.skill)
         logger.info(f'Пользователь тренирует конкретный скилл: {skill}')
         return skill
-    elif user.mode == Modes.worst:
-        skill = random.choice(skills.get_values())
+
+    elif user.mode == basics.Modes().worst:
+        # TODO: Переписать на получение самых слабых навыков
+        skill = random.choice(skills.Skills.get_children())
         logger.info(f'Пользователь тренирует самые слабые скиллы: {skill}')
-        return skill
+        return skill()
 
 
-async def parse_score_from_ai_answer(answer: str) -> int:
+def parse_score_from_ai_answer(answer: str) -> int:
     """Парсим оценку из ответа нейросети"""
     match = re.search(r'Оценка: (\d+/\d+)', answer)
     if match:
@@ -41,20 +46,31 @@ async def parse_score_from_ai_answer(answer: str) -> int:
     return score
 
 
-async def create_skill_map(skill_score: db.SkillsScores) -> str:
+def get_new_skill_rating(current_rating, new_score, alpha=settings.alpha_coefficient):
+    """Пересчитываем оценку, используя метод экспоненциального сглаживания
+    для обновления средней оценки"""
+    new_score = alpha * new_score + (1 - alpha) * current_rating
+    logger.info(f'Пересчитываем оценку, используя метод экспоненциального сглаживания: {new_score}')
+    return new_score
+
+
+async def create_skill_map(tg_id: int) -> str:
     """Создаем диаграмму паука с оценкой навыков"""
     logger.info('Создаем диаграмму паука с оценкой навыков')
 
+    # Получаем оценки навыков в модели пользователя из базы данных
+    user = await db.get_user(tg_id)
+
     # Получаем названия скиллов из класса SkillsData
-    skills_data = SkillsData()
-    skills = skills_data.model_dump()
+    all_skills_names = skills.Skills.get_children()
 
     # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
     # а значения — это названия навыков на русском
-    skills_dict = {attr: value for attr, value in skills.items()}
+    skills_dict = {skill().short_name: skill().short_description for skill in all_skills_names}
 
     # Создаем список оценок для каждого навыка
-    scores = [getattr(skill_score, skill) for skill in skills_dict.keys()]
+    scores = [getattr(user, skill().short_name) for skill in all_skills_names]
+    logger.debug(f'Оценки при создании карты: {scores=}')
 
     # Создаем массив углов для каждого навыка
     angles = np.linspace(0, 2*np.pi, len(skills_dict), endpoint=False).tolist()
@@ -96,6 +112,10 @@ async def create_skill_map(skill_score: db.SkillsScores) -> str:
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    answer = 'Оценка: 7/10'
-    logger.info(loop.run_until_complete(parse_score_from_ai_answer(answer)))
+    logger.info(get_new_skill_rating(8, 9))
+
+    async def main():
+        path_to_result_pic = await create_skill_map(tg_id=542570177)
+        print(path_to_result_pic)
+
+    asyncio.run(main())

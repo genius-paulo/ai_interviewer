@@ -9,8 +9,13 @@ from src.bot.states import Form
 from src.config import settings
 from src.giga_chat.models import MiddlePythonInterviewerChat
 from src.giga_chat.giga_chat import AIInterviewer
-from src.bot.keyboards import main_keyboard, question_keyboard, skills_keyboard, mode_keyboard
-from src.bot.models import Commands, User, SkillsData, mode
+from src.bot.keyboards import (main_keyboard,
+                               question_keyboard,
+                               skills_keyboard,
+                               mode_keyboard,
+                               cancel_keyboard)
+from src.bot.models.basics import Commands, User, Modes
+from src.bot.models.skills import Skills
 
 from src.db import db
 from src.bot import utils
@@ -21,12 +26,11 @@ interviewer = AIInterviewer(api_token=settings.gigachat_api_token)
 
 async def start(message: types.Message, state: FSMContext):
     """Отправляем стартовое сообщение"""
+    await state.finish()  # на всякий случай заканчивай все состояния
     logger.info(f'Пользователь {message.from_user.id} запустил бота.')
-    logger.debug(f'Тип id пользователя: {type(message.from_user.id)}')
-    # TODO: Для скиллов нужны новые модельки с техническим названием, русскоязычным значением и развернутым описанием подтем,
-    # конкретно здесь сейчас передаю basic строкой, тк тяжело передать название атрибута, в нужно именно оно
-    user = await db.get_or_create_user(User(tg_id=message.from_user.id))
-    logger.info(f'Пользователь {user} c Telegram ID {message.from_user.id} создан')
+
+    await db.create_user(message.from_user.id)
+    logger.info(f'Пользователь c Telegram ID {message.from_user.id} создан')
     # TODO: Текст нужно вынести в отдельный дата-класс
     await message.answer(f'Привет, {message.from_user.full_name}! Я бот-интервьюер. '
                          f'Я могу задавать вопросы по программированию на Python. '
@@ -34,7 +38,6 @@ async def start(message: types.Message, state: FSMContext):
                          f'— /{Commands.get_question_command}, чтобы получить вопрос собеседования.\n'
                          f'— /{Commands.change_skills_command}, чтобы уточнить навыки, которые ты хочешь подтянуть.',
                          reply_markup=await main_keyboard())
-    await state.finish()
 
 
 async def cancel(message: types.Message, state: FSMContext):
@@ -54,10 +57,20 @@ async def get_question(message: types.Message, state: FSMContext):
     history_chat = MiddlePythonInterviewerChat()
 
     user = User(tg_id=message.from_user.id)
-    user = await db.get_or_create_user(user)
-    logger.info(f'Сейчас пользователь {user.tg_id} тренирует навык: {user.skill}')
-    history_chat.skill = user.skill
-    personal_context_question = history_chat.context_questions.format(skill=user.skill)
+    logger.debug(f'Создали объект пользователя: {user.model_dump()}')
+    user = await db.get_user(tg_id=message.from_user.id)
+
+    history_chat.skill = await utils.get_skill_by_category(message.from_user.id)
+    history_chat.score = getattr(user, history_chat.skill.short_name)
+    logger.debug(f'Получили оценку текущего навыка: {history_chat.score=}')
+
+    # TODO: Возможно, стоит как-то получше инкапсулировать логику связи
+    #  технического названия навыка и его расширенной версии
+    logger.debug(f'Получили навык по категории: {history_chat.skill.short_description}')
+
+    personal_context_question = (history_chat
+                                 .context_questions
+                                 .format(skill=history_chat.skill.short_description))
 
     logger.info(f'Обновляем персональный контекст вопроса: {personal_context_question}')
 
@@ -81,9 +94,8 @@ async def get_question(message: types.Message, state: FSMContext):
     # Передаем объект истории в состояние
     async with state.proxy() as data:
         data['history_chat'] = history_chat
-
-    # Отправляем вопрос пользователю
-    await message.reply(history_chat.question, reply_markup=await question_keyboard())
+        # Отправляем вопрос пользователю
+        await message.reply(f'Вопрос на знание навыка: {history_chat.skill.short_description}\n\n' + history_chat.question, reply_markup=await question_keyboard())
 
 
 async def recreate_question(message: types.Message, state: FSMContext):
@@ -124,8 +136,17 @@ async def process_question(message: types.Message, state: FSMContext):
         logger.debug(response)
         answer = response.choices[0].message.content
         await message.answer(answer, reply_markup=await main_keyboard())
-        score = await utils.parse_score_from_ai_answer(answer)
-        await db.update_score_skill(User(tg_id=message.from_user.id), history_chat.skill, score)
+
+        # Получаем оценку из ответа нейросети, рассчитываем экспоненциальное сглаживания
+        # и забиваем оценку в базу
+        old_score = history_chat.score
+        new_score = utils.parse_score_from_ai_answer(answer)
+        expo_score = utils.get_new_skill_rating(old_score, new_score)
+        result = await db.update_skill_rating(tg_id=message.from_user.id,
+                                              skill=history_chat.skill.short_name,
+                                              rating=expo_score)
+        logger.debug(f'{result=}')
+
         await state.finish()  # Завершаем состояния
 
 
@@ -138,24 +159,26 @@ async def change_skills(message: types.Message, state: FSMContext):
     # Отправляем вопрос пользователю
     await message.reply('Какую тему хочешь подтянуть?',
                         reply_markup=await skills_keyboard())
+    await message.reply(f"Выбери один из вариантов или нажми {Commands.cancel_text}", reply_markup=await cancel_keyboard())
 
 
 async def process_skill_selection(callback_query: types.CallbackQuery, state: FSMContext):
     """Обрабатываем выбор скилла"""
     logger.info('Обрабатываем выбор скилла')
     skill = callback_query.data
+    logger.debug(f'User ID при передаче в get_user(): {callback_query.from_user.id=}')
     # Сохраняем выбранный скилл пользователя
-    new_user_skill = User(tg_id=callback_query.from_user.id, mode=mode.specific, skill=skill)
-    await db.update_user(new_user_skill)
+    await db.update_skill(callback_query.from_user.id, skill)
+    user = await db.get_user(tg_id=callback_query.from_user.id)
     await state.finish()  # Завершаем состояния
-    await callback_query.message.answer(f'Тема для тренировок  в режиме {mode.specific} обновлена, '
-                                        f'режим тренировок автоматически изменен на {new_user_skill.mode}. '
-                                        f'Попробуй сгенерировать вопрос по теме {new_user_skill.skill}.',
+    await callback_query.message.answer(f'Тема для тренировок  в режиме {Modes().specific} обновлена. '
+                                        f'Попробуй сгенерировать вопрос по теме '
+                                        f'«{Skills.get_skill_by_name(user.skill).short_description}».',
                                         reply_markup=await main_keyboard())
 
 
 async def change_mode(message: types.Message, state: FSMContext):
-    """"Изменяем режим тренировок, на основе которого бот будет
+    """"Изменяем режим тренировок, на основе которого модель будет
     присылать вопросы по одной, по всем или только по слабым темам"""
     logger.info('Изменяем режим тренировок пользователя')
     # Устанавливаем состояние изменения навыков
@@ -167,6 +190,8 @@ async def change_mode(message: types.Message, state: FSMContext):
                         '\n— specific — конкретный навык, '
                         '\n— worst — навыки с самой низкой оценкой.',
                         reply_markup=await mode_keyboard())
+    await message.reply(f"Выбери один из вариантов или нажми {Commands.cancel_text}",
+                        reply_markup=await cancel_keyboard())
 
 
 async def process_mode_selection(callback_query: types.CallbackQuery, state: FSMContext):
@@ -174,9 +199,8 @@ async def process_mode_selection(callback_query: types.CallbackQuery, state: FSM
     logger.info('Обрабатываем выбор навык')
     current_mode = callback_query.data
     # Сохраняем выбранный скилл пользователя
-    new_user_mode = User(tg_id=callback_query.from_user.id, mode=current_mode)
-    await db.update_user(new_user_mode)
-    await callback_query.message.answer(f'Режим тренировок обновлен на {new_user_mode.mode}.',
+    await db.update_mode(tg_id=callback_query.from_user.id, mode=current_mode)
+    await callback_query.message.answer(f'Режим тренировок обновлен на {current_mode}.',
                                         reply_markup=await main_keyboard())
     await state.finish()  # Завершаем состояние
 
@@ -184,9 +208,8 @@ async def process_mode_selection(callback_query: types.CallbackQuery, state: FSM
 async def get_profile(message: types.Message):
     """Получаем профиль"""
     logger.info('Получаем профиль')
-    user = await db.get_user(User(tg_id=message.from_user.id))
-    skills_scores = await db.get_score_skill(user)
-    path_to_skill_map = await utils.create_skill_map(skills_scores)
+    user = await db.get_user(tg_id=message.from_user.id)
+    path_to_skill_map = await utils.create_skill_map(message.from_user.id)
     photo_file = types.InputFile(path_to_skill_map)
     await message.reply_photo(photo_file,
                               caption=f'🗺️ Вот карта твоих навыков, показывающая готовность к собеседованию. '
@@ -194,7 +217,8 @@ async def get_profile(message: types.Message):
                                       f'\n\n⚙️ Режим тренировок: {user.mode}.'
                                       f'\nAll — все темы в случайном порядке, specific — конкретная тема, '
                                       f'worst — темы с самой низкой оценкой.'
-                                      f'\n\n💪 Навык для тренировки в режиме specific: {user.skill}.')
+                                      f'\n\n💪 Навык для тренировки в режиме specific: '
+                                      f'«{Skills.get_skill_by_name(user.skill).short_description}».')
     logger.info(f'Удаляем файл {path_to_skill_map}')
     await asyncio.get_event_loop().run_in_executor(None, os.remove, path_to_skill_map)
 
@@ -226,3 +250,7 @@ async def register_handlers(dp: Dispatcher):
 
     #  Хэндлеры обработки ответа на вопрос
     dp.register_message_handler(process_question, state=Form.question)
+
+
+if __name__ == '__main__':
+    logger.debug(Skills.get_skill_by_name('efficiency').short_description)
