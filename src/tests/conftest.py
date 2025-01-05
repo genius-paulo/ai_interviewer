@@ -1,7 +1,8 @@
 import pytest
 import peewee_async
+from loguru import logger
 from src.config import settings
-from src.db.models import Users, Skills, SkillsData, database_proxy
+from src.db.models import database_proxy, Users
 
 
 @pytest.fixture(scope="module")
@@ -10,6 +11,7 @@ def db():
                                                user=settings.db_user,
                                                password=settings.db_password,
                                                host=settings.db_host)
-    database_proxy.initialize(db)
+    result = database_proxy.initialize(db)
+    logger.info(f'Фикстура базы запущена: {result}')
     yield db
-    #db.drop_tables([Users, Skills])
+    #db.drop_tables([Users, SkillsScores])

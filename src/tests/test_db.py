@@ -1,55 +1,52 @@
+import pytest_asyncio
 import pytest
-import peewee
-from loguru import logger
-
-from src.db.db import create_tables, insert_skills, get_or_create_user, update_user, delete_user
-from src.bot.models import User
-from src.db.models import Users, Skills, SkillsData
+from src.db.models import Users
+from src.db.db import *
 
 
-@pytest.mark.asyncio
-async def test_create_tables(db):
-    await create_tables(Users)
-    await create_tables(Skills)
-    assert Users.table_exists()
-    assert Skills.table_exists()
+@pytest_asyncio.fixture(scope='module')
+async def setup_db():
+    # Создаем таблицу
+    await create_tables(Users())
+    yield
+    # Удаляем таблицу
+    # Users.drop_table()
 
 
 @pytest.mark.asyncio
-async def test_insert_skills(db):
-    skills_data_model = SkillsData()
-    await insert_skills()
-    skills = Skills.select().execute()
-    assert len(skills) == len(skills_data_model.model_dump())
+async def test_create_user(setup_db):
+    # Создаем пользователя
+    await create_user(123456789)
+    # Проверяем, что пользователь был создан
+    user = Users.get(Users.tg_id == 123456789)
+    assert user is not None
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_user(db):
-    user = User(tg_id=1234567)
-    result = await get_or_create_user(user)
-    logger.info(f'Пользователь создан: {result}: {result.tg_id=}')
-    assert result
-    assert result.tg_id == user.tg_id
+async def test_update_mode(setup_db):
+    # Обновляем режим пользователя
+    await update_mode(123456789, 'new_mode')
+    # Проверяем, что режим пользователя был обновлен
+    user = await get_user(123456789)
+    assert user.mode == 'new_mode'
 
 
 @pytest.mark.asyncio
-async def test_update_user(db):
-    user = User(tg_id=1234567, skills="new_skills")
-    updated_user = await update_user(user)
-    logger.info(f'Пользователь обновлен: {updated_user}: {updated_user.tg_id=}, {updated_user.skills=}')
-    assert updated_user.skills == user.skills
+async def test_update_skill(setup_db):
+    # Обновляем навык пользователя
+    await update_skill(123456789, 'new_skill')
+    # Проверяем, что навык пользователя был обновлен
+    user = await get_user(123456789)
+    assert user.skill == 'new_skill'
 
 
 @pytest.mark.asyncio
-async def test_delete_user(db):
-    user = User(tg_id=1234567)
-    await delete_user(user)
-    result_check_user = Users.get_or_none(Users.tg_id == user.tg_id)
-    logger.debug(f'{result_check_user=}')
-    assert Users.get_or_none(Users.tg_id == user.tg_id) is None
+async def test_update_skill_rating(setup_db):
+    # Обновляем оценку по навыку пользователя
+    await update_skill_rating(123456789, 'basic', 10)
+    # Проверяем, что оценка по навыку пользователя была обновлена
+    user = await get_user(123456789)
+    assert user.basic == 10
 
 
 
-@pytest.mark.asyncio
-async def test_create_skill_score():
-    pass

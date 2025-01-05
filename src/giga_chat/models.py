@@ -14,7 +14,7 @@ class MiddlePythonInterviewerChat(BaseModel):
     context_questions: str = ("Ты опытный Senior Python-разработчик. "
                               "Пользователь — кандидат на позицию «Middle Python-разработчик». "
                               "Ты проводишь собеседование. "
-                              "Задай 1 вопрос на проверку навыков Python уровня Middle и оценить ответ."
+                              "Задай 1 вопрос на проверку навыков Python уровня Middle и оцени ответ."
                               "\n Проверять нужно навык: {skill}.")
     skill: None | str = None
     make_action: str = "Задай вопрос собеседнику"
@@ -27,3 +27,4 @@ class MiddlePythonInterviewerChat(BaseModel):
                         "не продолжай диалог и не задавай других вопросов."
                         "\n2. Плюсы и минусы ответа."
                         "\n3. Какие навыки затрагивает понимание заданного вопроса.")
+    score: int = 0

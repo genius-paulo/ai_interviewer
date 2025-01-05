@@ -15,7 +15,6 @@ async def main():
     logger.info(f'Подключились к базе данных: {db.db}')
     # Создали в БД таблицы
     await db.create_tables(models.Users())
-    await db.create_tables(models.SkillsScores())
     logger.info(f'Таблицы созданы')
     # Инициализация бота
     bot = Bot(token=settings.tg_token)
