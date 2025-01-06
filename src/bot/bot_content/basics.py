@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
-from src.bot.models import skills
+from src.bot.bot_content import skills
 
 
 class Commands:
@@ -13,7 +13,7 @@ class Commands:
     change_skills_text = '💪 Выбрать навык'
 
     profile_command = 'profile'
-    profile_text = '👤 Профиль'
+    profile_text = '👤 Мои навыки'
 
     change_mode_command = 'mode'
     change_mode_text = '⚙️ Выбрать режим интервью'
