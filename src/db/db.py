@@ -3,7 +3,7 @@ from loguru import logger
 
 from src.config import settings
 from src.db.models import DBModel, Users, database_proxy
-from src.bot.models.basics import Modes
+from src.bot.bot_content.basics import Modes
 
 logger.debug(settings)
 

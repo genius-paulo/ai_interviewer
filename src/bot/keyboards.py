@@ -1,5 +1,5 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from src.bot.models import basics, skills
+from src.bot.bot_content import basics, skills
 
 
 async def main_keyboard() -> ReplyKeyboardMarkup:

@@ -3,7 +3,7 @@ import asyncio
 import re
 from loguru import logger
 
-from src.bot.models import basics, skills
+from src.bot.bot_content import basics, skills
 from src.config import settings
 from src.db import db
 
@@ -15,7 +15,8 @@ import os
 
 
 async def get_skill_by_category(tg_id_user) -> skills.Skills:
-
+    """Возвращает навык пользователя в зависимости от режима
+    тренировки"""
     user = await db.get_user(tg_id=tg_id_user)
 
     if user.mode == basics.Modes().all:
@@ -29,10 +30,17 @@ async def get_skill_by_category(tg_id_user) -> skills.Skills:
         return skill
 
     elif user.mode == basics.Modes().worst:
-        # TODO: Переписать на получение самых слабых навыков
-        skill = random.choice(skills.Skills.get_children())
-        logger.info(f'Пользователь тренирует самые слабые скиллы: {skill}')
-        return skill()
+        # Получаем названия скиллов из класса SkillsData
+        all_skills_names = skills.Skills.get_children()
+
+        # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
+        # а значения — это оценки навыков пользователя
+        skills_dict = {skill().short_name: getattr(user, skill().short_name) for skill in all_skills_names}
+
+        # Получаем навык с самой низкой оценкой
+        skill = skills.Skills.get_skill_by_name(min(skills_dict, key=skills_dict.get))
+        logger.info(f'Пользователь тренирует самые слабые скиллы: {skill.short_description}')
+        return skill
 
 
 def parse_score_from_ai_answer(answer: str) -> int:
@@ -60,14 +68,12 @@ async def create_skill_map(tg_id: int) -> str:
 
     # Получаем оценки навыков в модели пользователя из базы данных
     user = await db.get_user(tg_id)
-
     # Получаем названия скиллов из класса SkillsData
     all_skills_names = skills.Skills.get_children()
-
     # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
     # а значения — это названия навыков на русском
     skills_dict = {skill().short_name: skill().short_description for skill in all_skills_names}
-
+    logger.debug(f'Скиллы при создании карты: {skills_dict=}')
     # Создаем список оценок для каждого навыка
     scores = [getattr(user, skill().short_name) for skill in all_skills_names]
     logger.debug(f'Оценки при создании карты: {scores=}')
@@ -90,10 +96,8 @@ async def create_skill_map(tg_id: int) -> str:
     # Устанавливаем метки для каждого навыка
     labels = [textwrap.fill(label, 10, break_long_words=False) for label in skills_dict.values()]
     ax.set_thetagrids([angle * 180/np.pi for angle in angles[:-1]], labels)
-
     # Устанавливаем диапазон значений для оси Y
     ax.set_ylim(0, 10)
-
     # Увеличиваем размер шрифта и отступы для меток
     ax.tick_params(labelsize=15, pad=60)
 

@@ -1,6 +1,6 @@
 import peewee
 
-from src.bot.models import skills, basics
+from src.bot.bot_content import skills, basics
 
 # Создаем пустой Proxy для будущей базы данных
 database_proxy = peewee.Proxy()
