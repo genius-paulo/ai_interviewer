@@ -5,8 +5,6 @@ from src.config import settings
 from src.db.models import DBModel, Users, database_proxy
 from src.bot.bot_content.basics import Modes
 
-logger.debug(settings)
-
 db = peewee_async.PooledPostgresqlDatabase(database=settings.db_name,
                                            user=settings.db_user,
                                            password=settings.db_password,
