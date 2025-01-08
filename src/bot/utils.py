@@ -86,7 +86,7 @@ async def create_skill_map(tg_id: int) -> str:
     scores += scores[:1]
 
     # Создаем фигуру и оси
-    fig = plt.figure(figsize=(10, 10))
+    fig = plt.figure(tight_layout=True, figsize=(10, 10))
     ax = fig.add_subplot(111, polar=True)
 
     # Рисуем диаграмму паука
@@ -95,7 +95,8 @@ async def create_skill_map(tg_id: int) -> str:
 
     # Устанавливаем метки для каждого навыка
     labels = [textwrap.fill(label, 10, break_long_words=False) for label in skills_dict.values()]
-    ax.set_thetagrids([angle * 180/np.pi for angle in angles[:-1]], labels)
+    angles_degrees = np.degrees(angles[:-1])
+    ax.set_thetagrids(angles_degrees, labels)
     # Устанавливаем диапазон значений для оси Y
     ax.set_ylim(0, 10)
     # Увеличиваем размер шрифта и отступы для меток
@@ -110,7 +111,8 @@ async def create_skill_map(tg_id: int) -> str:
     # Создаем папку src/resources/, если она не существует
     os.makedirs(os.path.dirname(path_to_result_pic), exist_ok=True)
 
-    await asyncio.get_event_loop().run_in_executor(None, plt.savefig, path_to_result_pic)
+    # Отправляем сохранение в отдельный поток, чтобы не блокировать основной поток
+    await asyncio.to_thread(plt.savefig, path_to_result_pic)
 
     return path_to_result_pic
 
