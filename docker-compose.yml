@@ -2,7 +2,7 @@ version: '3'
 
 services:
   pgdb:
-    image: postgres:15
+    image: postgres:15-alpine
     env_file:
       - .env
     environment:
@@ -13,6 +13,13 @@ services:
       - "5432:5432"
     hostname: ${DB_HOST}
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_COUNT_DB: ${REDIS_COUNT_DB}
 
   app:
     build: .
@@ -22,3 +29,4 @@ services:
       - .env
     depends_on:
       - pgdb
+      - redis

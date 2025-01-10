@@ -1,5 +1,5 @@
 # Первый этап: сборка зависимостей и создание требований
-FROM python:3.10-slim-buster as builder
+FROM python:3.10.11-slim-buster as builder
 
 # Копируем исходный код приложения
 WORKDIR /usr/src/ai_interviwer/
@@ -7,14 +7,22 @@ COPY src /usr/src/ai_interviwer/src
 COPY poetry.lock pyproject.toml .
 
 # Устанавливаем Poetry и экспортируем зависимости в файл requirements.txt
-RUN pip install --no-cache-dir poetry==1.8.4
-RUN poetry export --without-hashes -f requirements.txt -o requirements.txt
+RUN pip install --no-cache-dir poetry && \
+    poetry install --no-root && \
+    poetry run pip freeze > requirements.txt
 
 # Второй этап: создание финального образа
-FROM python:3.10-alpine
+FROM python:3.10.11-alpine
 
 # Копируем требования из первого этапа
 COPY --from=builder /usr/src/ai_interviwer/requirements.txt .
+
+# Установливаем инструменты сборки и заголовочные файлы
+RUN apk update && apk add --no-cache \
+    build-base \
+    gcc \
+    make \
+    linux-headers
 
 # Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
@@ -29,8 +37,6 @@ WORKDIR /usr/src/ai_interviwer/
 ENV PYTHONPATH=/usr/src/ai_interviwer/
 
 # Устанавливаем curl
-RUN apk add --no-cache curl
-
 # Загружаем сертификат для взаимодействия с GigaChatAPI
-RUN curl -k "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer" -w "\n" >> $(python -m certifi)
-
+RUN apk add --no-cache curl && \
+    curl -k "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer" -w "\n" >> $(python -m certifi)

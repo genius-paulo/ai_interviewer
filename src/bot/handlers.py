@@ -1,5 +1,4 @@
-import os
-import asyncio
+import io
 from loguru import logger
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
@@ -14,12 +13,14 @@ from src.bot.keyboards import (main_keyboard,
                                skills_keyboard,
                                mode_keyboard,
                                cancel_keyboard)
-from src.bot.bot_content.basics import Commands, User, Modes
+from src.bot.bot_content.basics import Commands
 from src.bot.bot_content.skills import Skills
 from src.bot.bot_content.texts import actual_texts
 
 from src.db import db
 from src.bot import utils
+
+from src.db.cache.cache import cache
 
 # Создаем экземпляр интервьюера
 interviewer = AIInterviewer(api_token=settings.gigachat_api_token)
@@ -52,11 +53,11 @@ async def get_question(message: types.Message, state: FSMContext):
     logger.info('Получаем вопрос от ИИ')
     # Создаем объект истории чата
     history_chat = MiddlePythonInterviewerChat()
+
     # Получаем пользователя из базы
     user = await db.get_user(tg_id=message.from_user.id)
-
     # Получаем навык в зависимости от режима и сохраняем навык/оценку в истории чата
-    history_chat.skill = await utils.get_skill_by_category(message.from_user.id)
+    history_chat.skill = await utils.get_skill_by_category(user)
     history_chat.score = getattr(user, history_chat.skill.short_name)
 
     # Создаем персональный контекст вопроса для пользователя
@@ -171,9 +172,7 @@ async def process_skill_selection(callback_query: types.CallbackQuery, state: FS
     logger.info('Обрабатываем выбор скилла')
     # Сохраняем выбранный скилл пользователя
     skill = callback_query.data
-    await db.update_skill(callback_query.from_user.id, skill)
-    user = await db.get_user(tg_id=callback_query.from_user.id)
-
+    user = await db.update_skill(callback_query.from_user.id, skill)
     # Завершаем состояния и отвечаем юзеру
     await state.finish()
 
@@ -213,13 +212,39 @@ async def get_profile(message: types.Message):
     logger.info('Получаем профиль')
     # Получаем объект пользователя из базы
     user = await db.get_user(tg_id=message.from_user.id)
-    # Создаем картинку со скиллами пользователя
-    path_to_skill_map = await utils.create_skill_map(message.from_user.id)
-    # Передаем путь в InputFile — в таком режиме телеграм принимает изображение
-    await message.reply_photo(types.InputFile(path_to_skill_map),
-                              caption=actual_texts.profile.format(user_mode=user.mode, user_skill=user.skill))
-    logger.info(f'Удаляем файл после отправки {path_to_skill_map}')
-    await asyncio.get_event_loop().run_in_executor(None, os.remove, path_to_skill_map)
+
+    # Получаем ключ для кэша и название для файла
+    image_cache_key = utils.get_skill_map_name(user, mode='key')
+    image_filename = utils.get_skill_map_name(user, mode='file')
+
+    # Проверяем наличие кэша в Redis
+    file_id = await cache.get(image_cache_key)
+
+    if file_id is None:
+        logger.debug(f"Создаем карту навыков: {image_filename}. "
+                     f"Отправляем ее пользователю и загружаем в кэш.")
+        # Если кэша нет, создаем картинку со скиллами пользователя
+        bytes_skill_map = await utils.create_skill_map(user)
+        # Создаем объект InputFile из массива байтов
+        skill_map_file = types.InputFile(io.BytesIO(bytes_skill_map), filename=image_filename)
+        # Отправляем карту пользователю
+        msg = await message.reply_photo(skill_map_file,
+                                        caption=actual_texts
+                                        .profile
+                                        .format(user_mode=user.mode,
+                                                user_skill=user.skill))
+        # Получаем идентификатор файла
+        file_id = msg.photo[-1].file_id
+        # Сохраняем идентификатор файла в Redis
+        await cache.set(image_cache_key, file_id)
+    else:
+        logger.debug(f"Отправляем кэш карты навыков: {file_id.decode('utf-8')}")
+        # Отправляем файл пользователю
+        await message.reply_photo(file_id.decode('utf-8'),
+                                  caption=actual_texts
+                                  .profile
+                                  .format(user_mode=user.mode,
+                                          user_skill=user.skill))
 
 
 async def register_handlers(dp: Dispatcher):
@@ -244,7 +269,7 @@ async def register_handlers(dp: Dispatcher):
     dp.register_callback_query_handler(process_mode_selection, state=Form.mode)
 
     # Хэндлеры для просмотра профиля
-    dp.register_message_handler(get_profile, Text(Commands.profile_text))
+    dp.register_message_handler(get_profile, Text(Commands.profile_text), )
     dp.register_message_handler(get_profile, commands=[Commands.profile_command])
 
     #  Хэндлеры обработки ответа на вопрос
