@@ -123,12 +123,23 @@ def get_skill_map_name(user: db.Users, mode: str = 'file'):
         return f'skill_map_{user.tg_id}'
 
 
+def get_sticker_by_score(ai_answer_score: int) -> str:
+    """Возвращает стикер в зависимости от оценки на ответ"""
+    if 0 <= ai_answer_score < 4:
+        # Возвращаем рандомный стикер из категории sad
+        return basics.Stickers().get_sad_sticker()
+    elif 4 <= ai_answer_score < 7:
+        # Возвращаем рандомный стикер из категории neutral
+        return basics.Stickers().get_neutral_sticker()
+    elif 7 <= ai_answer_score <= 10:
+        # Возвращаем рандомный стикер из категории happy
+        return basics.Stickers().get_happy_sticker()
+    else:
+        # Возвращаем ошибку
+        raise ValueError('Неверная оценка')
+
+
 if __name__ == '__main__':
     logger.info(get_new_skill_rating(8, 9))
-
-    async def main():
-        user = db.Users(tg_id=8, mode=basics.Modes().all, skill=skills.Basic().short_name, web=5.3, algorithms=7.1)
-        path_to_result_pic = await create_skill_map(user)
-        print(path_to_result_pic)
-
-    asyncio.run(main())
+    for i in range(11):
+        logger.info(f'Оценка: {i}. Стикер: {get_sticker_by_score(i)}')

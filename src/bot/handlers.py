@@ -138,12 +138,17 @@ async def process_question(message: types.Message, state: FSMContext):
 
         # Получаем оценку из ответа нейросети, рассчитываем экспоненциальное сглаживание,
         # получаем финальную оценку, чтобы именно ее вставить как новую в базу
+        ai_answer_score = utils.parse_score_from_ai_answer(ai_answer)
         expo_score = utils.get_new_skill_rating(current_rating=history_chat.score,
-                                                new_score=utils.parse_score_from_ai_answer(ai_answer))
+                                                new_score=ai_answer_score)
         # Забиваем оценку в базу
         await db.update_skill_rating(tg_id=message.from_user.id,
                                      skill=history_chat.skill.short_name,
                                      rating=expo_score)
+
+        # Отсылаем стикер в зависимости от оценки: маленькая — грустный, большая — веселый
+        await message.answer_sticker(sticker=utils.get_sticker_by_score(ai_answer_score))
+
         # Создаем финальное сообщение с изменением оценки
         final_text = actual_texts.ai_answer.format(ai_answer=ai_answer,
                                                    old_score=history_chat.score,

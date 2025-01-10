@@ -26,6 +26,7 @@ class Settings(BaseSettingsWithConfig):
 
     # Креды Telegram
     tg_token: str
+    admin_chat_id: int
     skip_updates: bool = True
 
     # Креды базы

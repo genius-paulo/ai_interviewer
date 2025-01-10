@@ -4,13 +4,16 @@ AI-помощник для подготовки к интервью Middle Pytho
 1. Скачать исходники из репозитория
 2. Создать файл `.env` из шаблона `template.env`
 3. Запустить `docker compose up --build` для сборки образа 
-4. Написать `/get_question` в боте или воспользоваться кнопками
+4. Для первого запуска написать `/start`, для последующих — `/get_question` в боте или воспользоваться кнопками
 
 ### Инструкция для быстрого запуска локально
 1. Указать в .env тестовый `TG_TOKEN` и `DB_HOST=localhost` для локалки
 2. Запустить контейнер базы данных:
 `docker run --name pg-container -e POSTGRES_DB=inter_db -e POSTGRES_USER=inter_user -e POSTGRES_PASSWORD=inter_password -p 5432:5432 -d postgres:15`
-3. Запустить main.py, можно прямо из консоли
+3. Запустить контейнер Redis:
+`docker run -d -p 6379:6379 --name redis redis
+`
+4. Запустить main.py, можно прямо из консоли
 
 ### Профилирование кода
 1. Для проверки асинхронности можно запустить `pyinstrument`:
