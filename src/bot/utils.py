@@ -1,6 +1,7 @@
 import random
 import asyncio
 import re
+import io
 from loguru import logger
 
 from src.bot.bot_content import basics, skills
@@ -14,10 +15,9 @@ import uuid
 import os
 
 
-async def get_skill_by_category(tg_id_user) -> skills.Skills:
+async def get_skill_by_category(user: db.Users) -> skills.Skills:
     """Возвращает навык пользователя в зависимости от режима
     тренировки"""
-    user = await db.get_user(tg_id=tg_id_user)
 
     if user.mode == basics.Modes().all:
         skill = random.choice(skills.Skills.get_children())
@@ -62,12 +62,10 @@ def get_new_skill_rating(current_rating, new_score, alpha=settings.alpha_coeffic
     return new_score
 
 
-async def create_skill_map(tg_id: int) -> str:
+async def create_skill_map(user: db.Users) -> bytes:
     """Создаем диаграмму паука с оценкой навыков"""
     logger.info('Создаем диаграмму паука с оценкой навыков')
 
-    # Получаем оценки навыков в модели пользователя из базы данных
-    user = await db.get_user(tg_id)
     # Получаем названия скиллов из класса SkillsData
     all_skills_names = skills.Skills.get_children()
     # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
@@ -105,23 +103,32 @@ async def create_skill_map(tg_id: int) -> str:
     # Устанавливаем отступы для подграфиков
     plt.subplots_adjust(left=0.20, right=0.80, top=0.80, bottom=0.20)
 
-    # Генерируем уникальное название файла
-    path_to_result_pic = os.path.join('resources', f'skill_map_{uuid.uuid4()}.png')
+    # Создаем объект BytesIO
+    img_bytes = io.BytesIO()
 
-    # Создаем папку src/resources/, если она не существует
-    os.makedirs(os.path.dirname(path_to_result_pic), exist_ok=True)
+    # Сохраняем картинку в объект BytesIO
+    await asyncio.to_thread(plt.savefig, img_bytes, format='png')
 
-    # Отправляем сохранение в отдельный поток, чтобы не блокировать основной поток
-    await asyncio.to_thread(plt.savefig, path_to_result_pic)
+    # Возвращаем массив байтов
+    return img_bytes.getvalue()
 
-    return path_to_result_pic
+
+def get_skill_map_name(user: db.Users, mode: str = 'file'):
+    """Возвращает имя файла для сохранения диаграммы паука:
+    — mode='file' возвращает имя файла с .png
+    — mode='key' возвращает ключ для сохранения карты в кэше без .png"""
+    if mode == 'file':
+        return f'skill_map_{user.tg_id}.png'
+    elif mode == 'key':
+        return f'skill_map_{user.tg_id}'
 
 
 if __name__ == '__main__':
     logger.info(get_new_skill_rating(8, 9))
 
     async def main():
-        path_to_result_pic = await create_skill_map(tg_id=542570177)
+        user = db.Users(tg_id=8, mode=basics.Modes().all, skill=skills.Basic().short_name, web=5.3, algorithms=7.1)
+        path_to_result_pic = await create_skill_map(user)
         print(path_to_result_pic)
 
     asyncio.run(main())

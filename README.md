@@ -11,3 +11,9 @@ AI-помощник для подготовки к интервью Middle Pytho
 2. Запустить контейнер базы данных:
 `docker run --name pg-container -e POSTGRES_DB=inter_db -e POSTGRES_USER=inter_user -e POSTGRES_PASSWORD=inter_password -p 5432:5432 -d postgres:15`
 3. Запустить main.py, можно прямо из консоли
+
+### Профилирование кода
+1. Для проверки асинхронности можно запустить `pyinstrument`:
+`PYTHONPATH=. pyinstrument src/main.py -t -r RENDERER`
+2. Для общего профилирования — `scalene`:
+`scalene --cpu --memory --cli src/main.py`

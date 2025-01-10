@@ -2,11 +2,11 @@
 name = "ai-interviwer"
 version = "0.1.0"
 description = ""
-authors = ["genius-paulo <124434105+genius-paulo@users.noreply.github.com>"]
+authors = ["genius-paulo"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.11.0"
+python = "3.10.11"
 httpx = "^0.28.1"
 python-dotenv = "^1.0.1"
 pydantic-settings = "^2.7.0"
@@ -26,6 +26,9 @@ matplotlib = "^3.10.0"
 numpy = "^2.2.1"
 scalene = "^1.5.49"
 pyinstrument = "^5.0.0"
+redis = "^5.2.1"
+aioredis = "^2.0.1"
+certifi = "^2024.12.14"
 
 
 [build-system]
