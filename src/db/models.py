@@ -13,6 +13,7 @@ class DBModel(peewee.Model):
 
 
 class Users(DBModel):
+    """Модель пользователя"""
     id = peewee.AutoField(primary_key=True)
     tg_id = peewee.BigIntegerField(unique=True)
     mode = peewee.CharField(choices=[basics.Modes().all, basics.Modes().specific, basics.Modes().worst],
@@ -32,3 +33,8 @@ class Users(DBModel):
     efficiency = peewee.FloatField(default=0.0)
     additional = peewee.FloatField(default=0.0)
     algorithms = peewee.FloatField(default=0.0)
+
+    # Флаг оплаченного пользователя
+    paid = peewee.BooleanField(default=False)
+
+

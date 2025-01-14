@@ -3,13 +3,14 @@ from loguru import logger
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
+from aiogram.utils.markdown import hspoiler
 
 from src.bot.states import Form
-from src.config import settings
 from src.giga_chat.models import MiddlePythonInterviewerChat
-from src.giga_chat.giga_chat import AIInterviewer
+from src.giga_chat import giga_chat
 from src.bot.keyboards import (main_keyboard,
                                question_keyboard,
+                               get_answer_keyboard,
                                skills_keyboard,
                                mode_keyboard,
                                cancel_keyboard)
@@ -21,9 +22,6 @@ from src.db import db
 from src.bot import utils
 
 from src.db.cache.cache import cache
-
-# Создаем экземпляр интервьюера
-interviewer = AIInterviewer(api_token=settings.gigachat_api_token)
 
 
 async def start(message: types.Message, state: FSMContext):
@@ -50,48 +48,59 @@ async def cancel(message: types.Message, state: FSMContext):
 
 async def get_question(message: types.Message, state: FSMContext):
     """Получаем вопрос от ИИ и передаем пользователю"""
-    logger.info('Получаем вопрос от ИИ')
-    # Создаем объект истории чата
-    history_chat = MiddlePythonInterviewerChat()
 
-    # Получаем пользователя из базы
+    # Получаем пользователя из базы и получаем объект его скилла
     user = await db.get_user(tg_id=message.from_user.id)
-    # Получаем навык в зависимости от режима и сохраняем навык/оценку в истории чата
-    history_chat.skill = await utils.get_skill_by_category(user)
-    history_chat.score = getattr(user, history_chat.skill.short_name)
+    user_skill_obj = await utils.get_skill_by_category(user)
+    user_skill_score = getattr(user, user_skill_obj.short_name)
 
-    # Создаем персональный контекст вопроса для пользователя
-    personal_context_question = (history_chat
-                                 .context_questions
-                                 .format(skill=history_chat.skill.short_description))
-    logger.info(f'Обновляем персональный контекст вопроса: {personal_context_question}')
+    """Создаем объект истории чата и сохраняем в нем:
+    1. Навык в зависимости от режима.
+    2. Старую оценку.
+    3. Вопрос пользователю в зависимости от навыка.
+    """
+    history_chat = MiddlePythonInterviewerChat(skill=user_skill_obj,
+                                               score=user_skill_score,
+                                               # TODO: Пока что задаем рандомный вопрос,
+                                               #  желательно сделать так, чтобы вопросы не повторялись
+                                               question=user_skill_obj.get_random_question())
 
-    # Составляем запрос в формате, который принимает GigaChatAPI
-    response = await interviewer.model.achat({"messages":
-        [
-            {
-                "role": "system",
-                "content": personal_context_question
-            },
-            {
-                "role": "user",
-                "content": history_chat.make_action
-            },
-        ], })
-    logger.debug(f'Ответ: {response}')
+    logger.info(f'Создали историю чата вопрос: {history_chat.model_dump()}')
 
-    # Устанавливаем состояние вопроса
-    await Form.question.set()
-    # Запоминаем ответ-вопрос бота
-    # TODO: это хардкод, нужна отдельная моделька для запроса и ответа
-    history_chat.question = response.choices[0].message.content
     # Передаем объект истории в состояние
     async with state.proxy() as data:
         data['history_chat'] = history_chat
         # Отправляем вопрос пользователю
-        await message.reply(text=actual_texts.get_question.format(skill=history_chat.skill.short_description,
-                                                                  ai_question=history_chat.question),
+        await message.reply(text=actual_texts.get_question_skill.format(skill=history_chat.skill.short_description),
                             reply_markup=await question_keyboard())
+        await message.bot.send_message(chat_id=message.from_user.id,
+                                       text=f'*{actual_texts.get_question_ai_question}*'.format(
+                                           ai_question=history_chat.question),
+                                       reply_markup=await get_answer_keyboard(),
+                                       parse_mode=types.ParseMode.MARKDOWN)
+        # Устанавливаем состояние вопроса
+        await Form.question.set()
+
+
+async def get_answer_the_question(callback_query: types.CallbackQuery):
+    """Дополняем сообщение ответом"""
+    logger.info('Дополняем сообщение ответом.')
+    process_text = f'<b>{callback_query.message.text}</b>' + '\n\nГенерирую ответ...'
+    await callback_query.message.edit_text(text=process_text,
+                                           parse_mode=types.ParseMode.HTML,
+                                           reply_markup=types.InlineKeyboardMarkup())
+
+    # Извлекаем текст вопроса из сообщения
+    question_text = callback_query.message.text
+
+    # Отправляем текст вопроса на нейросеть и получаем ответ
+    answer_text = await giga_chat.get_answer_the_question(question_text)
+
+    final_text = f'<b>{callback_query.message.text}</b>' + hspoiler('\n\n' + f'{answer_text}')
+    # Дополняем исходное сообщение ответом от нейросети и удаляем inline-клавиатуру
+    await callback_query.message.edit_text(text=final_text,
+                                           parse_mode=types.ParseMode.HTML,
+                                           reply_markup=types.InlineKeyboardMarkup())
 
 
 async def recreate_question(message: types.Message, state: FSMContext):
@@ -104,40 +113,18 @@ async def recreate_question(message: types.Message, state: FSMContext):
 async def process_question(message: types.Message, state: FSMContext):
     """Обрабатываем ответ на вопрос"""
     # Получаем объект истории чата
-    async with state.proxy() as data:
+    async with (state.proxy() as data):
         history_chat = data['history_chat']
+
         # Дополняем промпт ответом пользователя
-        history_chat.user_answer = history_chat.user_answer.format(answer=message.text)
-        logger.info(f'Пользователь ответил: {history_chat.user_answer} на вопрос ИИ: {history_chat.question}')
+        history_chat.answer = message.text
+        logger.info(f'Пользователь ответил: {history_chat.answer} на вопрос ИИ: {history_chat.question}')
+        final_prompt = history_chat.get_final_prompt()
 
-        # Составляем запрос в формате, который принимает GigaChatAPI
-        response = await interviewer.model.achat({"messages":
-            [
-                {
-                    "role": "system",
-                    "content": history_chat.context_questions
-                },
-                {
-                    "role": "user",
-                    "content": history_chat.make_action
-                },
-                {
-                    "role": "assistant",
-                    "content": history_chat.question
-                },
-                {
-                    "role": "user",
-                    "content": history_chat.user_answer
-                },
-
-            ], })
-
-        # Запоминаем ответ-вопрос бота
-        # TODO: это хардкод, нужна отдельная моделька для запроса и ответа
-        ai_answer = response.choices[0].message.content
-
-        # Получаем оценку из ответа нейросети, рассчитываем экспоненциальное сглаживание,
-        # получаем финальную оценку, чтобы именно ее вставить как новую в базу
+        # Получаем оценку ответа от нейросети
+        ai_answer = await giga_chat.get_assessment_of_answer(final_prompt)
+        # Рассчитываем экспоненциальное сглаживание,
+        # получаем финальную оценку, чтобы именно ее вставить в базу
         ai_answer_score = utils.parse_score_from_ai_answer(ai_answer)
         expo_score = utils.get_new_skill_rating(current_rating=history_chat.score,
                                                 new_score=ai_answer_score)
@@ -146,7 +133,8 @@ async def process_question(message: types.Message, state: FSMContext):
                                      skill=history_chat.skill.short_name,
                                      rating=expo_score)
 
-        # Отсылаем стикер в зависимости от оценки: маленькая — грустный, большая — веселый
+        # Отсылаем стикер в зависимости от оценки:
+        # маленькая — грустный, большая — веселый
         await message.answer_sticker(sticker=utils.get_sticker_by_score(ai_answer_score))
 
         # Создаем финальное сообщение с изменением оценки
@@ -218,6 +206,9 @@ async def get_profile(message: types.Message):
     # Получаем объект пользователя из базы
     user = await db.get_user(tg_id=message.from_user.id)
 
+    # Генерируем среднюю оценку по скиллам
+    average_score = utils.get_average_skill_score(user)
+
     # Получаем ключ для кэша и название для файла
     image_cache_key = utils.get_skill_map_name(user, mode='key')
     image_filename = utils.get_skill_map_name(user, mode='file')
@@ -236,8 +227,10 @@ async def get_profile(message: types.Message):
         msg = await message.reply_photo(skill_map_file,
                                         caption=actual_texts
                                         .profile
-                                        .format(user_mode=user.mode,
-                                                user_skill=user.skill))
+                                        .format(average_score=average_score,
+                                                user_mode=user.mode,
+                                                user_skill=user.skill),
+                                        parse_mode='HTML')
         # Получаем идентификатор файла
         file_id = msg.photo[-1].file_id
         # Сохраняем идентификатор файла в Redis
@@ -248,8 +241,10 @@ async def get_profile(message: types.Message):
         await message.reply_photo(file_id.decode('utf-8'),
                                   caption=actual_texts
                                   .profile
-                                  .format(user_mode=user.mode,
-                                          user_skill=user.skill))
+                                  .format(average_score=average_score,
+                                          user_mode=user.mode,
+                                          user_skill=user.skill),
+                                  parse_mode='HTML')
 
 
 async def register_handlers(dp: Dispatcher):
@@ -262,6 +257,7 @@ async def register_handlers(dp: Dispatcher):
     dp.register_message_handler(recreate_question, Text(Commands.another_question_text), state=Form.question)
     dp.register_message_handler(get_question, Text(Commands.get_question_text))
     dp.register_message_handler(get_question, commands=[Commands.get_question_command])
+    dp.register_callback_query_handler(get_answer_the_question, state=Form.question)
 
     # Хэндлеры для изменения скиллов
     dp.register_message_handler(change_skills, Text(Commands.change_skills_text))

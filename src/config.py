@@ -22,6 +22,8 @@ class Settings(BaseSettingsWithConfig):
     """Модель настроек"""
     # Креды гигачата
     gigachat_api_token: str
+    max_tokens_assessment: int
+    max_tokens_answer: int
     alpha_coefficient: float
 
     # Креды Telegram

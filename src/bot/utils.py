@@ -20,7 +20,7 @@ async def get_skill_by_category(user: db.Users) -> skills.Skills:
     тренировки"""
 
     if user.mode == basics.Modes().all:
-        skill = random.choice(skills.Skills.get_children())
+        skill = random.choice(skills.Skills.get_all_skills())
         logger.info(f'Пользователь тренирует все скиллы. Выбираем навык рандомно: {skill}')
         return skill()
 
@@ -31,7 +31,7 @@ async def get_skill_by_category(user: db.Users) -> skills.Skills:
 
     elif user.mode == basics.Modes().worst:
         # Получаем названия скиллов из класса SkillsData
-        all_skills_names = skills.Skills.get_children()
+        all_skills_names = skills.Skills.get_all_skills()
 
         # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
         # а значения — это оценки навыков пользователя
@@ -58,8 +58,9 @@ def get_new_skill_rating(current_rating, new_score, alpha=settings.alpha_coeffic
     """Пересчитываем оценку, используя метод экспоненциального сглаживания
     для обновления средней оценки"""
     new_score = alpha * new_score + (1 - alpha) * current_rating
-    logger.info(f'Пересчитываем оценку, используя метод экспоненциального сглаживания: {new_score}')
-    return new_score
+    round_new_score = round(new_score, 1)
+    logger.info(f'Пересчитываем оценку, используя метод экспоненциального сглаживания: {round_new_score}')
+    return round_new_score
 
 
 async def create_skill_map(user: db.Users) -> bytes:
@@ -67,7 +68,7 @@ async def create_skill_map(user: db.Users) -> bytes:
     logger.info('Создаем диаграмму паука с оценкой навыков')
 
     # Получаем названия скиллов из класса SkillsData
-    all_skills_names = skills.Skills.get_children()
+    all_skills_names = skills.Skills.get_all_skills()
     # Создаем словарь, где ключи - это названия атрибутов в классе SkillsScores,
     # а значения — это названия навыков на русском
     skills_dict = {skill().short_name: skill().short_description for skill in all_skills_names}
@@ -111,6 +112,17 @@ async def create_skill_map(user: db.Users) -> bytes:
 
     # Возвращаем массив байтов
     return img_bytes.getvalue()
+
+
+def get_average_skill_score(user: db.Users) -> float:
+    """Возвращает среднюю оценку навыков пользователя"""
+    all_skills_names = skills.Skills.get_all_skills()
+    scores = [getattr(user, skill().short_name) for skill in all_skills_names]
+    average_score = sum(scores) / len(scores)
+    # Округляем среднюю оценку
+    average_score = round(average_score, 1)
+    logger.info(f'Средняя оценка навыков пользователя: {average_score}')
+    return average_score
 
 
 def get_skill_map_name(user: db.Users, mode: str = 'file'):

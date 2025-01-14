@@ -1,8 +1,9 @@
-version: '3'
+version: '3.9'
 
 services:
   pgdb:
     image: postgres:15-alpine
+    container_name: pgdb
     env_file:
       - .env
     environment:
@@ -12,21 +13,35 @@ services:
     ports:
       - "5432:5432"
     hostname: ${DB_HOST}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
+    container_name: redis
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
     environment:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_COUNT_DB: ${REDIS_COUNT_DB}
+    volumes:
+      - redisdata:/data
 
   app:
-    build: .
-    command: python src/main.py
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-bot
+    command: sh -c "python src/db/migrate.py && python src/main.py"
     restart: always
     env_file:
       - .env
     depends_on:
       - pgdb
       - redis
+    volumes:
+      - ./src:/app/src   # Для разработки - монтирование локальных файлов
+
+volumes:
+  pgdata:       # Объявление тома для PostgreSQL
+  redisdata:    # Объявление тома для Redis

@@ -11,6 +11,9 @@ class Commands:
     get_question_command = 'get_question'
     get_question_text = '❓️Получить вопрос'
 
+    get_answer_command = 'get_answer'
+    get_answer_text = '✨ Сгенерировать ответ'
+
     change_skills_command = 'change_skill'
     change_skills_text = '💪 Выбрать навык'
 

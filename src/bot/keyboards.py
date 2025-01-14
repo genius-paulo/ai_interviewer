@@ -22,6 +22,13 @@ async def question_keyboard() -> ReplyKeyboardMarkup:
     return keyboard
 
 
+async def get_answer_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text=basics.Commands.get_answer_text,
+                                      callback_data=basics.Commands.get_answer_command))
+    return keyboard
+
+
 async def cancel_keyboard() -> ReplyKeyboardMarkup:
     kb_list = [
         [KeyboardButton(text=basics.Commands.cancel_text)]]
@@ -30,7 +37,7 @@ async def cancel_keyboard() -> ReplyKeyboardMarkup:
 
 
 async def skills_keyboard():
-    skills_list = skills.Skills.get_children()
+    skills_list = skills.Skills.get_all_skills()
     keyboard = InlineKeyboardMarkup()
     for skill in skills_list:
         keyboard.add(InlineKeyboardButton(text=skill().short_description, callback_data=skill().short_name))
@@ -49,7 +56,7 @@ if __name__ == '__main__':
     import asyncio
 
     async def main():
-        print(skills.Skills.get_children())
+        print(skills.Skills.get_all_skills())
         keyboard = await skills_keyboard()
         print(keyboard)
 
