@@ -20,6 +20,7 @@ from src.bot.bot_content.texts import actual_texts
 
 from aiogram.utils.markdown import hspoiler
 from src.bot import keyboards
+from src.config import settings
 
 from src.db import db
 from src.bot import utils
@@ -200,6 +201,9 @@ async def process_successful_payment(message: types.Message, state: FSMContext):
             currency=payment_info.currency,
             end_date=user_subscription.end_date.strftime('%d.%m.%Y')
         ))
+    await message.bot.send_message(chat_id=settings.admin_chat_id,
+                                   text=f'❗️ Пользователь {message.from_user.first_name} '
+                                        f'{message.from_user.last_name} оформил подписку.')
     await state.finish()
 
 
