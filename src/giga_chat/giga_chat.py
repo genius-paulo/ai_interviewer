@@ -32,6 +32,8 @@ class AIInterviewer:
 
 
 # TODO: Тоже сильно привязываемся к конкретной авторизации, исправить
+# TODO: Не знаю, почему перенес модель инвойса сюда,
+#  она не совсем относится к гигачату, перенести в другое место
 class XTRInvoiceOneMonth:
     """Объект платежа на 1 месяц в звездах телеграмма"""
 
@@ -42,7 +44,7 @@ class XTRInvoiceOneMonth:
         self.payload = payload
         self.currency = 'XTR'
         self.provider_token = ''
-        self.prices = [types.LabeledPrice(label='Подписка AI+ на 1 мес.', amount=1)]
+        self.prices = [types.LabeledPrice(label='Подписка AI+ на 1 мес.', amount=100)]
 
     async def send(self, bot):
         await bot.send_invoice(
