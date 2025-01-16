@@ -6,6 +6,10 @@ from src.bot.handlers import register_handlers
 from src.db import db, models
 from loguru import logger
 
+
+# TODO: Нужно реализовать нормальное логгирование и мониторинг показателей,
+#  сейчас надеюсь на чудо
+
 # Инициализируем бота
 bot = Bot(token=settings.tg_token)
 # Инициализируем объект памяти для хранения состояний

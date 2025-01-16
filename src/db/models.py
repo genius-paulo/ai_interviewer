@@ -1,4 +1,5 @@
 import peewee
+import datetime
 
 from src.bot.bot_content import skills, basics
 
@@ -16,9 +17,11 @@ class Users(DBModel):
     """Модель пользователя"""
     id = peewee.AutoField(primary_key=True)
     tg_id = peewee.BigIntegerField(unique=True)
+
     mode = peewee.CharField(choices=[basics.Modes().all, basics.Modes().specific, basics.Modes().worst],
                             default=basics.Modes().all)
     skill = peewee.TextField(default=skills.Basic().short_name)
+
 
     # Оценки скиллов
     basic = peewee.FloatField(default=0.0)
@@ -34,7 +37,23 @@ class Users(DBModel):
     additional = peewee.FloatField(default=0.0)
     algorithms = peewee.FloatField(default=0.0)
 
-    # Флаг оплаченного пользователя
-    paid = peewee.BooleanField(default=False)
+    created_at = peewee.DateTimeField(default=datetime.datetime.now)
+
+
+class Subscriptions(DBModel):
+    """Модель подписки"""
+    id = peewee.AutoField(primary_key=True)
+    user_id = peewee.ForeignKeyField(Users, backref='subscriptions')
+    start_date = peewee.DateField(null=True)
+    end_date = peewee.DateField(null=True)
+    status = peewee.CharField(choices=[basics.SubscriptionStatus().active, basics.SubscriptionStatus().inactive])
+    created_at = peewee.DateTimeField(default=datetime.datetime.now)
+    updated_at = peewee.DateTimeField(default=datetime.datetime.now)
+
+    class Meta:
+        database = database_proxy
+
+
+
 
 

@@ -1,9 +1,11 @@
 from pydantic import BaseModel
 from src.bot.bot_content import skills
+from src.db.models import Users
 from loguru import logger
 
 
 class MiddlePythonInterviewerChat(BaseModel):
+    user_is_paid: bool = None
     question: str = None
     context_questions: str = ("Ты Senior Python-разработчик и проводишь собеседование на Middle Python-разработчика. "
                               "Ты задал кандидату вопрос «{question}», ответ на который рекомендуется от 200 "

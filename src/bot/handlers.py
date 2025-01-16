@@ -2,10 +2,10 @@ import io
 from loguru import logger
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text
-from aiogram.utils.markdown import hspoiler
+from aiogram.dispatcher.filters import Text, Command
+from aiogram.types.message import ContentType
 
-from src.bot.states import Form
+from src.bot.states import Form, PaymentStates
 from src.giga_chat.models import MiddlePythonInterviewerChat
 from src.giga_chat import giga_chat
 from src.bot.keyboards import (main_keyboard,
@@ -18,11 +18,15 @@ from src.bot.bot_content.basics import Commands
 from src.bot.bot_content.skills import Skills
 from src.bot.bot_content.texts import actual_texts
 
+from aiogram.utils.markdown import hspoiler
+from src.bot import keyboards
+
 from src.db import db
 from src.bot import utils
-
 from src.db.cache.cache import cache
 
+# TODO: Нужно разделить функции в хэнделерах по категориям и вынести,
+#  сейчас они все намешаны здесь, их тяжело читать и поддерживать
 
 async def start(message: types.Message, state: FSMContext):
     """Отправляем стартовое сообщение"""
@@ -53,17 +57,20 @@ async def get_question(message: types.Message, state: FSMContext):
     user = await db.get_user(tg_id=message.from_user.id)
     user_skill_obj = await utils.get_skill_by_category(user)
     user_skill_score = getattr(user, user_skill_obj.short_name)
+    user_is_paid = await db.check_paid_status(user)
 
     """Создаем объект истории чата и сохраняем в нем:
     1. Навык в зависимости от режима.
     2. Старую оценку.
     3. Вопрос пользователю в зависимости от навыка.
     """
-    history_chat = MiddlePythonInterviewerChat(skill=user_skill_obj,
-                                               score=user_skill_score,
-                                               # TODO: Пока что задаем рандомный вопрос,
-                                               #  желательно сделать так, чтобы вопросы не повторялись
-                                               question=user_skill_obj.get_random_question())
+    history_chat = MiddlePythonInterviewerChat(
+        user_is_paid=user_is_paid,
+        skill=user_skill_obj,
+        score=user_skill_score,
+        # TODO: Пока что задаем рандомный вопрос,
+        #  желательно сделать так, чтобы вопросы не повторялись
+        question=user_skill_obj.get_random_question())
 
     logger.info(f'Создали историю чата вопрос: {history_chat.model_dump()}')
 
@@ -82,25 +89,22 @@ async def get_question(message: types.Message, state: FSMContext):
         await Form.question.set()
 
 
-async def get_answer_the_question(callback_query: types.CallbackQuery):
+async def get_answer_the_question(callback_query: types.CallbackQuery, state: FSMContext):
     """Дополняем сообщение ответом"""
     logger.info('Дополняем сообщение ответом.')
-    process_text = f'<b>{callback_query.message.text}</b>' + '\n\nГенерирую ответ...'
-    await callback_query.message.edit_text(text=process_text,
-                                           parse_mode=types.ParseMode.HTML,
-                                           reply_markup=types.InlineKeyboardMarkup())
+    # Получаем пользователя из history_chat
+    async with (state.proxy() as data):
+        history_chat = data['history_chat']
+        user_is_paid = history_chat.user_is_paid
 
-    # Извлекаем текст вопроса из сообщения
-    question_text = callback_query.message.text
+        process_text = f'<b>{callback_query.message.text}</b>' + '\n\nГенерирую ответ...'
+        await callback_query.message.edit_text(text=process_text,
+                                               parse_mode=types.ParseMode.HTML,
+                                               reply_markup=types.InlineKeyboardMarkup())
 
-    # Отправляем текст вопроса на нейросеть и получаем ответ
-    answer_text = await giga_chat.get_answer_the_question(question_text)
-
-    final_text = f'<b>{callback_query.message.text}</b>' + hspoiler('\n\n' + f'{answer_text}')
-    # Дополняем исходное сообщение ответом от нейросети и удаляем inline-клавиатуру
-    await callback_query.message.edit_text(text=final_text,
-                                           parse_mode=types.ParseMode.HTML,
-                                           reply_markup=types.InlineKeyboardMarkup())
+        logger.debug(f'Пользователь хочет платную подсказку. У него есть подписка? {user_is_paid}')
+        # меняем сообщение в зависимости от статуса подписки
+        await get_paid_hint(callback_query, user_is_paid)
 
 
 async def recreate_question(message: types.Message, state: FSMContext):
@@ -145,6 +149,58 @@ async def process_question(message: types.Message, state: FSMContext):
 
         # Завершаем состояния
         await state.finish()
+
+
+async def start_payment(message: types.Message, state: FSMContext):
+    """Начинаем процесс оплаты и обработки подписки"""
+    # На всякий случай завершаем все состояния
+    await state.finish()
+    logger.info(f'Начинаем платеж для пользователя {message.from_user.id}')
+    await message.bot.send_message(chat_id=message.from_user.id,
+                                   text=actual_texts.story_tell,
+                                   parse_mode='HTML',
+                                   reply_markup=await main_keyboard())
+    user_id = message.from_user.id
+
+    # Создаем объект платежа и отправляем его
+    invoice = giga_chat.XTRInvoiceOneMonth(
+        chat_id=message.from_user.id,
+        payload=f'user_{user_id}'
+    )
+    result = await invoice.send(message.bot)
+    logger.info(f'Платеж отправлен: {result}')
+
+
+async def process_pre_checkout_query(pre_checkout_query: types.PreCheckoutQuery):
+    """Получаем запрос от Telegram на проверку корректности заказа"""
+    logger.info(f'Получил pre_checkout_query: {pre_checkout_query}')
+    # Всегда подтверждайте pre_checkout_query, если все параметры корректны
+    await pre_checkout_query.bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+    await PaymentStates.waiting_for_payment.set()
+
+
+async def process_successful_payment(message: types.Message, state: FSMContext):
+    """Обрабатываем успешный платеж"""
+    logger.info(f'Получил успешный платеж: {message}')
+
+    payment_info = message.successful_payment
+    user_id = message.from_user.id
+
+    # Обновляем количество дней подписки у пользователя в базе данных
+    user_subscription = await db.update_subscription(user_id, days_count=31)
+
+    # Отправляем радостный стикер
+    # TODO: Это тупой костыль, надо исправить (заменить получение стикера на что-то, не относящееся к оценке)
+    await message.answer_sticker(sticker=utils.get_sticker_by_score(10))
+
+    # Сообщаем пользователю о новой дате подписки в формате день, месяц, год, где месяц написан текстом
+    await message.answer(
+        text=actual_texts.successful_payment.format(
+            total_amount=payment_info.total_amount,
+            currency=payment_info.currency,
+            end_date=user_subscription.end_date.strftime('%d.%m.%Y')
+        ))
+    await state.finish()
 
 
 async def change_skills(message: types.Message, state: FSMContext):
@@ -216,6 +272,12 @@ async def get_profile(message: types.Message):
     # Проверяем наличие кэша в Redis
     file_id = await cache.get(image_cache_key)
 
+    # Создаем текст сообщения
+    final_text = actual_texts.profile.format(average_score=average_score,
+                                             user_mode=user.mode,
+                                             user_skill=user.skill,
+                                             sub_status=await db.get_paid_status_for_profile(user))
+
     if file_id is None:
         logger.debug(f"Создаем карту навыков: {image_filename}. "
                      f"Отправляем ее пользователю и загружаем в кэш.")
@@ -225,11 +287,7 @@ async def get_profile(message: types.Message):
         skill_map_file = types.InputFile(io.BytesIO(bytes_skill_map), filename=image_filename)
         # Отправляем карту пользователю
         msg = await message.reply_photo(skill_map_file,
-                                        caption=actual_texts
-                                        .profile
-                                        .format(average_score=average_score,
-                                                user_mode=user.mode,
-                                                user_skill=user.skill),
+                                        caption=final_text,
                                         parse_mode='HTML')
         # Получаем идентификатор файла
         file_id = msg.photo[-1].file_id
@@ -239,12 +297,36 @@ async def get_profile(message: types.Message):
         logger.debug(f"Отправляем кэш карты навыков: {file_id.decode('utf-8')}")
         # Отправляем файл пользователю
         await message.reply_photo(file_id.decode('utf-8'),
-                                  caption=actual_texts
-                                  .profile
-                                  .format(average_score=average_score,
-                                          user_mode=user.mode,
-                                          user_skill=user.skill),
+                                  caption=final_text,
                                   parse_mode='HTML')
+
+
+async def get_paid_hint(callback_query: types.CallbackQuery, user_is_paid: bool) -> None:
+    # Извлекаем текст вопроса из сообщения
+    question_text = callback_query.message.text
+    # Заранее определяем пустую клавиатуру
+    inline_keyboard = types.InlineKeyboardMarkup()
+
+    # Проверяем активна ли подписка у пользователя
+    if user_is_paid:
+
+        # Отправляем текст вопроса на нейросеть и получаем ответ
+        answer_text = await giga_chat.get_answer_the_question(question_text)
+        # Дополняем исходное сообщение ответом от нейросети
+        final_text = f'<b>{question_text}</b>' + hspoiler('\n\n' + f'{answer_text}')
+        # Клавиатуру оставляем пустой
+    else:
+        final_text = (f'<b>{question_text}</b>'
+                      + '\n\nЧтобы генерировать подсказки, нужен AI+. '
+                        'Попробуй ответить самостоятельно или оформи AI+, '
+                        'чтобы получать подсказки прямо здесь :)')
+        # Меняем клавиатуру на предложение оформить подписку
+        inline_keyboard = await keyboards.get_subscribe_keyboard()
+
+    # Отправляем получившееся сообщение
+    await callback_query.message.edit_text(text=final_text,
+                                           parse_mode=types.ParseMode.HTML,
+                                           reply_markup=inline_keyboard)
 
 
 async def register_handlers(dp: Dispatcher):
@@ -253,11 +335,13 @@ async def register_handlers(dp: Dispatcher):
     dp.register_message_handler(start, commands=[Commands.start])
     dp.register_message_handler(cancel, Text(Commands.cancel_text), state='*')
 
-    # Хэндлеры получения и пересоздания вопроса
+    # Хэндлеры получения, пересоздания вопроса или получения подсказки
     dp.register_message_handler(recreate_question, Text(Commands.another_question_text), state=Form.question)
     dp.register_message_handler(get_question, Text(Commands.get_question_text))
     dp.register_message_handler(get_question, commands=[Commands.get_question_command])
-    dp.register_callback_query_handler(get_answer_the_question, state=Form.question)
+    dp.register_callback_query_handler(get_answer_the_question,
+                                       lambda c: c.data == Commands.get_answer_command,
+                                       state=Form.question)
 
     # Хэндлеры для изменения скиллов
     dp.register_message_handler(change_skills, Text(Commands.change_skills_text))
@@ -273,8 +357,17 @@ async def register_handlers(dp: Dispatcher):
     dp.register_message_handler(get_profile, Text(Commands.profile_text), )
     dp.register_message_handler(get_profile, commands=[Commands.profile_command])
 
-    #  Хэндлеры обработки ответа на вопрос
+    # Хэндлеры обработки ответа на вопрос
     dp.register_message_handler(process_question, state=Form.question)
+
+    # Хэндлеры для обработки подписки
+    dp.register_callback_query_handler(start_payment,
+                                       lambda c: c.data == Commands.get_subscribe_command,
+                                       state='*')
+    dp.register_message_handler(start_payment, commands=[Commands.get_subscribe_command])
+    dp.register_pre_checkout_query_handler(process_pre_checkout_query)
+    dp.register_message_handler(process_successful_payment, content_types=ContentType.SUCCESSFUL_PAYMENT,
+                                state=PaymentStates.waiting_for_payment)
 
 
 if __name__ == '__main__':

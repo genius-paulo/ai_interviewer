@@ -6,3 +6,7 @@ class Form(StatesGroup):
     question = State()
     skills = State()
     mode = State()
+
+
+class PaymentStates(StatesGroup):
+    waiting_for_payment = State()
