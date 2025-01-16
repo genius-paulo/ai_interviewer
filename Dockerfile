@@ -1,5 +1,5 @@
 # Первый этап: сборка зависимостей и создание требований
-FROM python:3.10.11-slim-buster as builder
+FROM python:3.10.11-slim-buster AS builder
 
 # Копируем исходный код приложения
 WORKDIR /usr/src/ai_interviwer/

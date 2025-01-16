@@ -29,6 +29,13 @@ async def get_answer_keyboard():
     return keyboard
 
 
+async def get_subscribe_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text=basics.Commands.get_subscribe_text,
+                                      callback_data=basics.Commands.get_subscribe_command))
+    return keyboard
+
+
 async def cancel_keyboard() -> ReplyKeyboardMarkup:
     kb_list = [
         [KeyboardButton(text=basics.Commands.cancel_text)]]

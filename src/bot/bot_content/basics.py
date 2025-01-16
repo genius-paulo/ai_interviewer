@@ -18,10 +18,13 @@ class Commands:
     change_skills_text = '💪 Выбрать навык'
 
     profile_command = 'profile'
-    profile_text = '👤 Мои навыки'
+    profile_text = '👤 Мой профиль'
 
     change_mode_command = 'mode'
     change_mode_text = '⚙️ Выбрать режим интервью'
+
+    get_subscribe_command = 'get_ai_plus'
+    get_subscribe_text = '✨ Получить все возможности AI+'
 
     another_question_text = '🔁 Другой вопрос'
 
@@ -69,3 +72,9 @@ class User(BaseModel):
     tg_id: int
     mode: Optional[str] = Modes().all
     skill: Optional[str] = skills.Basic().short_name
+
+
+class SubscriptionStatus(BaseModel):
+    active: str = 'active'
+    inactive: str = 'inactive'
+
