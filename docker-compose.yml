@@ -40,8 +40,52 @@ services:
       - pgdb
       - redis
     volumes:
-      - ./src:/app/src   # Для разработки - монтирование локальных файлов
+      - ./src:/app/src
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - pgdb
+      - redis
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  postgres_exporter:
+    image: bitnami/postgres-exporter:latest
+    container_name: postgres_exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@pgdb:5432/${DB_NAME}"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - pgdb
+
+  redis_exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter
+    environment:
+      REDIS_ADDR: "redis:${REDIS_PORT}"
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
 
 volumes:
-  pgdata:       # Объявление тома для PostgreSQL
-  redisdata:    # Объявление тома для Redis
+  pgdata:
+  redisdata:
+  grafana_data:

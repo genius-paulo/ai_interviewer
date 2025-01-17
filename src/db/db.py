@@ -32,8 +32,22 @@ async def get_user(tg_id: int):
 
 
 async def create_user(tg_id: int):
+    # Создаем пользователя
     user = Users(tg_id=tg_id)
     user.save()
+
+    # Создаем запись о подписке для пользователя
+    subscription = Subscriptions(
+        user_id=user.id,
+        status=SubscriptionStatus().inactive,  # По умолчанию подписка неактивна
+        start_date=None,
+        end_date=None,
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+    )
+    subscription.save()
+
+    return user
 
 
 async def update_mode(tg_id: int, mode: str):

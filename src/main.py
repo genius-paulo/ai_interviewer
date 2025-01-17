@@ -28,7 +28,6 @@ async def main():
         await db.create_tables(models.Users())
         logger.info(f'Таблицы созданы')
         logger.info(f'Бот инициализирован: {bot}')
-
         # Асинхронная регистрация обработчиков
         await register_handlers(dp)
         logger.info(f'Хэндлеры инициализированы')
